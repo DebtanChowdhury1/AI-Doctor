@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { PDFDocument, PDFFont, RGB, StandardFonts, rgb } from "pdf-lib";
 import { connectToDatabase } from "@/lib/mongoose";
 import { Chat } from "@/models/Chat";
