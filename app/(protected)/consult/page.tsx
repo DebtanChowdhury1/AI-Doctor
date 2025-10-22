@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  AlertTriangle,
+  ClipboardList,
   Clock,
   Edit3,
   History,
@@ -55,6 +58,77 @@ function formatRelativeTime(date: string) {
   }
 }
 
+const sectionIconMap: Array<{ pattern: RegExp; icon: LucideIcon }> = [
+  { pattern: /(important|warning|caution|disclaimer|note)/i, icon: AlertTriangle },
+  { pattern: /(next steps|plan|management|care)/i, icon: ClipboardList },
+  { pattern: /(medication|treatment|therapy|pharmac)/i, icon: Pill },
+  { pattern: /(cause|symptom|analysis|assessment|diagnos)/i, icon: Activity },
+  { pattern: /(definition|overview|summary|insight|introduction)/i, icon: Sparkles },
+  { pattern: /(hydration|rest|monitor|lifestyle)/i, icon: ShieldCheck },
+];
+
+function pickSectionIcon(title: string): LucideIcon {
+  const entry = sectionIconMap.find(({ pattern }) => pattern.test(title));
+  return entry ? entry.icon : Sparkles;
+}
+
+function renderSectionBody(lines: string[]) {
+  return (
+    <div className="mt-3 space-y-3 text-slate-700 dark:text-slate-200">
+      {lines.map((line, index) => {
+        const orderedMatch = line.match(/^(\d+)\.\s*(.*)$/);
+        if (orderedMatch) {
+          return (
+            <div
+              key={`ordered-${index}`}
+              className="flex items-start gap-3 rounded-2xl border border-brand/10 bg-white/70 p-4 dark:border-brand/20 dark:bg-slate-900/50"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand">
+                {orderedMatch[1]}
+              </span>
+              <p className="text-sm leading-relaxed">{orderedMatch[2] || orderedMatch[0]}</p>
+            </div>
+          );
+        }
+
+        if (/^[-•]/.test(line)) {
+          const cleaned = line.replace(/^[-•]\s*/, "");
+          return (
+            <div
+              key={`bullet-${index}`}
+              className="flex items-start gap-3 rounded-2xl bg-brand/5 p-3 text-sm leading-relaxed dark:bg-brand/10"
+            >
+              <Pill className="mt-0.5 h-4 w-4 text-brand" />
+              <span className="text-slate-700 dark:text-slate-200">{cleaned}</span>
+            </div>
+          );
+        }
+
+        const colonMatch = line.match(/^([^:]+):\s*(.+)$/);
+        if (colonMatch && colonMatch[1].length <= 80) {
+          return (
+            <div
+              key={`definition-${index}`}
+              className="rounded-2xl border border-brand/10 bg-brand/5 p-3 dark:border-brand/30 dark:bg-brand/15"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-brand/80">
+                {colonMatch[1]}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-700 dark:text-slate-100">{colonMatch[2]}</p>
+            </div>
+          );
+        }
+
+        return (
+          <p key={`paragraph-${index}`} className="rounded-2xl bg-white/70 p-4 text-sm leading-relaxed text-slate-700 dark:bg-slate-900/50 dark:text-slate-200">
+            {line}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function renderAssistantContent(content: string) {
   const blocks = content
     .split(/\n{2,}/)
@@ -62,29 +136,64 @@ function renderAssistantContent(content: string) {
     .filter(Boolean);
 
   return (
-    <div className="space-y-4 text-sm leading-relaxed">
+    <div className="space-y-6 text-sm leading-relaxed">
       {blocks.map((block, index) => {
         const lines = block.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-        const hasList = lines.some((line) => /^[-•]/.test(line));
+        if (lines.length === 0) {
+          return null;
+        }
 
-        if (hasList) {
+        const firstLine = lines[0].replace(/^[#*\s]+/, "");
+        const headingCandidate = lines.length > 1 && !/^([-•]|\d+\.)/.test(firstLine);
+
+        if (headingCandidate) {
+          const title = firstLine;
+          const Icon = pickSectionIcon(title);
+          const cautionTone = /(important|warning|caution|disclaimer|note)/i.test(title);
+          const baseClasses = cautionTone
+            ? "border-amber-300/60 bg-amber-50/80 text-amber-900 dark:border-amber-200/30 dark:bg-amber-900/30 dark:text-amber-100"
+            : "border-brand/10 bg-white/80 text-slate-800 shadow-inner dark:border-brand/20 dark:bg-slate-900/70 dark:text-slate-100";
+
           return (
-            <ul key={`list-${index}`} className="space-y-2 rounded-2xl bg-brand/5 p-4 text-left text-slate-700 dark:text-slate-100">
-              {lines.map((line, lineIndex) => {
-                const cleaned = line.replace(/^[-•]\s*/, "");
-                return (
-                  <li key={`list-${index}-${lineIndex}`} className="flex items-start gap-3">
-                    <Pill className="mt-0.5 h-4 w-4 text-brand" />
-                    <span>{cleaned}</span>
-                  </li>
-                );
-              })}
-            </ul>
+            <div
+              key={`section-${index}`}
+              className={`rounded-3xl border p-5 backdrop-blur ${baseClasses}`}
+            >
+              <div className="flex items-center gap-3 text-base font-semibold">
+                <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/60 text-brand dark:bg-slate-900/60">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span>{title}</span>
+              </div>
+              {renderSectionBody(lines.slice(1))}
+            </div>
+          );
+        }
+
+        if (/^\d+\./.test(firstLine)) {
+          return (
+            <div key={`standalone-list-${index}`} className="space-y-3">
+              {renderSectionBody(lines)}
+            </div>
+          );
+        }
+
+        if (/^[-•]/.test(firstLine)) {
+          return (
+            <div
+              key={`bullet-standalone-${index}`}
+              className="space-y-3 rounded-3xl border border-brand/10 bg-brand/5 p-4 dark:border-brand/20 dark:bg-brand/10"
+            >
+              {renderSectionBody(lines)}
+            </div>
           );
         }
 
         return (
-          <p key={`paragraph-${index}`} className="rounded-2xl bg-white/60 p-4 text-slate-700 backdrop-blur dark:bg-slate-900/40 dark:text-slate-200">
+          <p
+            key={`plain-${index}`}
+            className="rounded-3xl bg-white/80 p-5 text-sm leading-relaxed text-slate-700 shadow-inner dark:bg-slate-900/60 dark:text-slate-200"
+          >
             {block}
           </p>
         );
