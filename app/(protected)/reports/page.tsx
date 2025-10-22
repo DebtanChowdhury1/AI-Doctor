@@ -58,7 +58,7 @@ export default function ReportsPage() {
               Personalized PDF summaries
             </CardTitle>
             <p className="text-sm text-slate-500">
-              Includes recent consultations, goal progress, and Gemini\'s top wellness advice.
+              Includes recent consultations, goal progress, and AI Doctor&apos;s top wellness advice.
             </p>
           </div>
           <Button onClick={handleDownload} disabled={loading} className="mt-4 sm:mt-0">
@@ -78,13 +78,13 @@ export default function ReportsPage() {
         <CardContent className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
           <p>
             Reports are generated on-demand using your latest chats and goal updates. Each PDF is stamped with the generation
-            time and includes the AI Doctor\'s personalized insights and recommendations.
+            time and includes the AI Doctor&apos;s personalized insights and recommendations.
           </p>
           <ul className="grid gap-3 md:grid-cols-2">
             <li className="rounded-2xl bg-brand/10 p-4">
               <p className="font-semibold text-brand">Consultation history</p>
               <p className="text-xs text-slate-500">
-                Highlighted conversations and the AI Doctor\'s key responses.
+                Highlighted conversations and the AI Doctor&apos;s key responses.
               </p>
             </li>
             <li className="rounded-2xl bg-success/10 p-4">
@@ -96,7 +96,7 @@ export default function ReportsPage() {
             <li className="rounded-2xl bg-warning/10 p-4">
               <p className="font-semibold text-warning">Actionable insights</p>
               <p className="text-xs text-slate-500">
-                Gemini distills your data into professional recommendations.
+                Our AI distills your data into professional recommendations.
               </p>
             </li>
             <li className="rounded-2xl bg-brand/10 p-4">

@@ -149,7 +149,7 @@ export default function GoalsPage() {
       <div className="grid gap-6 md:grid-cols-2">
         {goals.length === 0 ? (
           <div className="glass-card col-span-full rounded-3xl p-8 text-center text-sm text-slate-500">
-            You haven\'t created any goals yet. Start with one simple habit.
+            You haven&apos;t created any goals yet. Start with one simple habit.
           </div>
         ) : (
           goals.map((goal) => {
