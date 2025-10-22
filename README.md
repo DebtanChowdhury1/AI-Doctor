@@ -19,7 +19,7 @@ AI Doctor is a production-ready, full-stack health assistant built with Next.js 
 - [MongoDB](https://www.mongodb.com/) + [Mongoose](https://mongoosejs.com/)
 - [Recharts](https://recharts.org/) for analytics visualizations
 - [Google Gemini 2.0 Flash API](https://ai.google.dev/) for medical-grade responses
-- [pdfkit](https://pdfkit.org/) for server-side PDF generation
+- [pdf-lib](https://pdf-lib.js.org/) for server-side PDF generation
 
 ## 🚀 Getting Started
 
@@ -85,7 +85,7 @@ npm run lint
 - Deploy to [Vercel](https://vercel.com/) for optimal Next.js support.
 - Provision a MongoDB Atlas cluster and add the connection string to Vercel environment variables.
 - Set the Clerk environment keys and Gemini API key in your hosting provider.
-- Ensure the `PDFKit` native dependencies are supported (Vercel Node runtimes are compatible).
+- Ensure `pdf-lib` generation runs in the Node.js runtime (Vercel Node runtimes are compatible).
 
 ## 🔐 Security Considerations
 
