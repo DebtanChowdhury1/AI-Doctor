@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 255 255 255;
+  --foreground: 17 24 39;
+}
+
+.dark {
+  --background: 17 24 39;
+  --foreground: 255 255 255;
+}
+
+body {
+  background: radial-gradient(circle at top, rgba(108, 99, 255, 0.12), transparent 55%),
+    linear-gradient(120deg, rgba(46, 196, 182, 0.08), transparent 60%);
+  min-height: 100vh;
+}
+
+.glass-card {
+  @apply backdrop-blur-xl bg-white/70 dark:bg-slate-900/60 border border-white/40 dark:border-white/10 shadow-xl;
+}
+
+.grad-text {
+  background: linear-gradient(120deg, #6c63ff, #2ec4b6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.fade-in {
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
