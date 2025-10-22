@@ -10,6 +10,7 @@ export interface Message {
 export interface ChatDocument {
   _id: Types.ObjectId;
   userId: string;
+  title: string;
   messages: Message[];
   createdAt: Date;
   updatedAt: Date;
@@ -28,6 +29,12 @@ const MessageSchema = new Schema<Message>(
 const ChatSchema = new Schema<ChatDocument>(
   {
     userId: { type: String, required: true, index: true },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      default: "Untitled consultation",
+    },
     messages: { type: [MessageSchema], default: [] },
   },
   { timestamps: true }
