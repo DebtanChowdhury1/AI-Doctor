@@ -5,9 +5,9 @@ import { PDFDocument, PDFFont, RGB, StandardFonts, rgb } from "pdf-lib";
 import { connectToDatabase } from "@/lib/mongoose";
 import { callGemini } from "@/lib/gemini";
 import { extractFirstJsonObject } from "@/lib/utils";
-import { Chat } from "@/models/Chat";
-import { Goal } from "@/models/Goal";
-import { Report } from "@/models/Report";
+import { Chat, type ChatDocument } from "@/models/Chat";
+import { Goal, type GoalDocument } from "@/models/Goal";
+import { Report, type ReportDocument } from "@/models/Report";
 
 export const runtime = "nodejs";
 
@@ -21,6 +21,25 @@ type GoalRecord = {
   title: string;
   progressHistory?: Array<{ date: Date; value: number; note?: string }>;
 };
+
+const mapChatDocument = (chat: ChatDocument): ChatRecord => ({
+  createdAt: new Date(chat.createdAt),
+  title: chat.title,
+  messages: chat.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    createdAt: new Date(message.createdAt),
+  })),
+});
+
+const mapGoalDocument = (goal: GoalDocument): GoalRecord => ({
+  title: goal.title,
+  progressHistory: (goal.progressHistory ?? []).map((entry) => ({
+    date: new Date(entry.date),
+    value: entry.value,
+    note: entry.note,
+  })),
+});
 
 const MAX_TRANSCRIPT_LENGTH = 6000;
 
@@ -95,7 +114,7 @@ async function buildReportBuffer({
     opacity?: number;
     radius?: number;
   }) => {
-    const { x, y, width: w, height: h, color, opacity = 1, radius = 16 } = options;
+    const { x, y, width: w, height: h, color, opacity = 1 } = options;
     page.drawRectangle({
       x,
       y,
@@ -103,7 +122,6 @@ async function buildReportBuffer({
       height: h,
       color,
       opacity,
-      borderRadius: radius,
     });
   };
 
@@ -338,7 +356,9 @@ function parseReportResponse(raw: string): ReportPayload {
               ? section.bullets.filter((item: unknown): item is string => typeof item === "string")
               : [],
           }))
-          .filter((section) => section.bullets.length > 0)
+          .filter(
+            (section: { heading: string; bullets: string[] }) => section.bullets.length > 0
+          )
       : [],
   };
 }
@@ -391,15 +411,17 @@ export async function GET(request: Request) {
   await connectToDatabase();
 
   if (reportId) {
-    const reportRecord = await Report.findOne({ _id: reportId, userId }).lean();
+    const reportRecord = (await Report.findOne({ _id: reportId, userId }).lean()) as
+      | (ReportDocument & { createdAt: Date })
+      | null;
 
     if (!reportRecord) {
       return new NextResponse("Report not found", { status: 404 });
     }
 
     const [chats, goals] = await Promise.all([
-      Chat.find({ userId }).sort({ createdAt: 1 }).lean(),
-      Goal.find({ userId }).lean(),
+      Chat.find({ userId }).sort({ createdAt: 1 }).lean().exec(),
+      Goal.find({ userId }).lean().exec(),
     ]);
 
     const buffer = await buildReportBuffer({
@@ -412,8 +434,8 @@ export async function GET(request: Request) {
         personalNotes: reportRecord.personalNotes ?? undefined,
         createdAt: reportRecord.createdAt,
       },
-      chats: chats as ChatRecord[],
-      goals: goals as GoalRecord[],
+      chats: (chats as unknown as ChatDocument[]).map(mapChatDocument),
+      goals: (goals as unknown as GoalDocument[]).map(mapGoalDocument),
     });
 
     return new NextResponse(buffer, {
@@ -426,21 +448,16 @@ export async function GET(request: Request) {
   }
 
   if (threadId) {
-    const thread = await Chat.findOne({ _id: threadId, userId }).lean();
+    const thread = (await Chat.findOne({ _id: threadId, userId }).lean()) as
+      | ChatDocument
+      | null;
 
     if (!thread) {
       return new NextResponse("Consultation not found", { status: 404 });
     }
 
-    const goals = await Goal.find({ userId }).lean();
-    const goalRecords: GoalRecord[] = goals.map((goal) => ({
-      title: goal.title,
-      progressHistory: (goal.progressHistory ?? []).map((entry) => ({
-        date: new Date(entry.date),
-        value: entry.value,
-        note: entry.note,
-      })),
-    }));
+    const goals = await Goal.find({ userId }).lean().exec();
+    const goalRecords: GoalRecord[] = (goals as unknown as GoalDocument[]).map(mapGoalDocument);
     const chatRecord: ChatRecord = {
       createdAt: new Date(thread.createdAt),
       title: thread.title,
@@ -502,7 +519,12 @@ export async function POST(request: Request) {
     chats.length
       ? chats
           .slice(-5)
-          .map((chat, idx) => `Consult ${idx + 1}: ${chat.messages.map((m) => `${m.role} says ${m.content}`).join(" | ")}`)
+          .map(
+            (chat, idx) =>
+              `Consult ${idx + 1}: ${chat.messages
+                .map((message: ChatRecord["messages"][number]) => `${message.role} says ${message.content}`)
+                .join(" | ")}`
+          )
           .join("\n")
       : "No consultations recorded yet.",
     goals.length

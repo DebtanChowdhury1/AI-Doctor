@@ -50,7 +50,7 @@ function parseRoadmapResponse(raw: string): RoadmapResult {
             ? step.actions.filter((action): action is string => typeof action === "string")
             : [],
         }))
-        .filter((step) => step.focus.trim().length > 0)
+        .filter((step: GoalRoadmapStep) => step.focus.trim().length > 0)
     : [];
 
   return {

@@ -12,6 +12,8 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement;
 };
 
+type ToastInput = Omit<ToasterToast, "id">;
+
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
   UPDATE_TOAST: "UPDATE_TOAST",
@@ -131,7 +133,7 @@ function dispatch(action: Action) {
   });
 }
 
-function toast({ ...props }: ToastProps) {
+function toast({ ...props }: ToastInput) {
   const id = genId();
 
   const update = (props: ToasterToast) =>

@@ -3,8 +3,8 @@ import { auth } from "@clerk/nextjs/server";
 
 import { connectToDatabase } from "@/lib/mongoose";
 import { callGemini } from "@/lib/gemini";
-import { Chat } from "@/models/Chat";
-import { Goal } from "@/models/Goal";
+import { Chat, type ChatDocument, type Message } from "@/models/Chat";
+import { Goal, type GoalDocument } from "@/models/Goal";
 
 const SYMPTOM_KEYWORDS = [
   "headache",
@@ -47,7 +47,7 @@ function buildWeeklyEngagement({
   chats,
   goals,
 }: {
-  chats: Array<{ messages: Array<{ role: string; createdAt: Date }> }>;
+  chats: Array<{ messages: Message[] }>;
   goals: Array<{ progressHistory?: Array<{ date: Date }> }>;
 }) {
   const today = new Date();
@@ -65,8 +65,8 @@ function buildWeeklyEngagement({
   const chatCounts = new Map<string, number>();
   chats.forEach((chat) => {
     chat.messages
-      .filter((message) => message.role === "user")
-      .forEach((message) => {
+      .filter((message: Message) => message.role === "user")
+      .forEach((message: Message) => {
         const key = toDateKey(new Date(message.createdAt));
         chatCounts.set(key, (chatCounts.get(key) ?? 0) + 1);
       });
@@ -133,16 +133,22 @@ export async function GET() {
 
   await connectToDatabase();
 
-  const [chats, goals] = await Promise.all([
-    Chat.find({ userId }).lean(),
-    Goal.find({ userId }).lean(),
+  const [chatDocs, goalDocs] = await Promise.all([
+    Chat.find({ userId }).lean().exec(),
+    Goal.find({ userId }).lean().exec(),
   ]);
 
+  const chats = chatDocs as unknown as ChatDocument[];
+  const goals = goalDocs as unknown as GoalDocument[];
+
   const totalConsultations = chats.reduce(
-    (acc, chat) => acc + chat.messages.filter((m) => m.role === "user").length,
+    (acc, chat) =>
+      acc + chat.messages.filter((message: Message) => message.role === "user").length,
     0
   );
-  const assistantMessages = chats.flatMap((chat) => chat.messages.filter((m) => m.role === "assistant"));
+  const assistantMessages = chats.flatMap((chat) =>
+    chat.messages.filter((message: Message) => message.role === "assistant")
+  );
   const avgConfidence = Math.min(
     97,
     60 + assistantMessages.reduce((acc, message) => acc + Math.min(message.content.length / 120, 1), 0) * 7
@@ -153,7 +159,10 @@ export async function GET() {
     count: chats.reduce(
       (total, chat) =>
         total +
-        chat.messages.filter((m) => m.role === "user" && m.content.toLowerCase().includes(keyword.toLowerCase())).length,
+        chat.messages.filter(
+          (message: Message) =>
+            message.role === "user" && message.content.toLowerCase().includes(keyword.toLowerCase())
+        ).length,
       0
     ),
   }));
