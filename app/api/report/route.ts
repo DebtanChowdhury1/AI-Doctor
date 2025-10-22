@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 
 type ChatRecord = {
   createdAt: Date;
+  title?: string;
   messages: Array<{ role: string; content: string; createdAt: Date }>;
 };
 
@@ -20,6 +21,23 @@ type GoalRecord = {
   title: string;
   progressHistory?: Array<{ date: Date; value: number; note?: string }>;
 };
+
+const MAX_TRANSCRIPT_LENGTH = 6000;
+
+function clampTranscript(messages: ChatRecord["messages"]) {
+  const joined = messages
+    .map((message) => {
+      const speaker = message.role === "assistant" ? "AI" : "User";
+      return `${speaker}: ${message.content}`;
+    })
+    .join("\n");
+
+  if (joined.length <= MAX_TRANSCRIPT_LENGTH) {
+    return joined;
+  }
+
+  return joined.slice(joined.length - MAX_TRANSCRIPT_LENGTH);
+}
 
 type ReportPayload = {
   title: string;
@@ -325,6 +343,40 @@ function parseReportResponse(raw: string): ReportPayload {
   };
 }
 
+async function summariseThreadReport({
+  thread,
+  goals,
+}: {
+  thread: ChatRecord;
+  goals: GoalRecord[];
+}): Promise<ReportPayload> {
+  const transcript = clampTranscript(thread.messages);
+  const goalDigest = goals
+    .map((goal) => {
+      const history = goal.progressHistory ?? [];
+      const latest = history[history.length - 1];
+      return `${goal.title}${latest ? ` — latest update ${latest.value}%` : ""}`;
+    })
+    .join(" | ");
+
+  const prompt = [
+    "Compose a physician-style consultation brief as an AI-powered assistant.",
+    thread.title ? `Consultation title: ${thread.title}` : undefined,
+    transcript ? `Transcript (latest messages last):\n${transcript}` : "Transcript not available.",
+    goalDigest ? `Active goals overview: ${goalDigest}` : undefined,
+    "Return strict JSON with keys title, summary, careNote, focusHighlights (array of 3 strings), sections (array of objects with heading and bullets).",
+    "Headings should cover definition/assessment, possible causes, medication guidance (OTC only when appropriate), lifestyle steps, and urgent warnings when present.",
+    "Summaries must cite clinical reasoning, reference hydration and rest when suitable, and finish with a clear disclaimer urging professional care for red flags.",
+    "The careNote must include an explicit disclaimer, mention this is AI powered, and advise contacting a licensed clinician when symptoms persist or worsen.",
+    "Do not mention Gemini, large language models, or that this is a generated summary.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const response = await callGemini(prompt);
+  return parseReportResponse(response);
+}
+
 export async function GET(request: Request) {
   const { userId } = auth();
 
@@ -334,6 +386,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const reportId = searchParams.get("reportId");
+  const threadId = searchParams.get("threadId");
 
   await connectToDatabase();
 
@@ -368,6 +421,57 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename=${reportRecord.title.replace(/\s+/g, "-").toLowerCase()}-${reportRecord._id}.pdf`,
+      },
+    });
+  }
+
+  if (threadId) {
+    const thread = await Chat.findOne({ _id: threadId, userId }).lean();
+
+    if (!thread) {
+      return new NextResponse("Consultation not found", { status: 404 });
+    }
+
+    const goals = await Goal.find({ userId }).lean();
+    const goalRecords: GoalRecord[] = goals.map((goal) => ({
+      title: goal.title,
+      progressHistory: (goal.progressHistory ?? []).map((entry) => ({
+        date: new Date(entry.date),
+        value: entry.value,
+        note: entry.note,
+      })),
+    }));
+    const chatRecord: ChatRecord = {
+      createdAt: new Date(thread.createdAt),
+      title: thread.title,
+      messages: (thread.messages ?? []).map((message) => ({
+        role: message.role,
+        content: message.content,
+        createdAt: new Date(message.createdAt),
+      })),
+    };
+
+    const report = await summariseThreadReport({
+      thread: chatRecord,
+      goals: goalRecords,
+    });
+
+    const buffer = await buildReportBuffer({
+      report: {
+        ...report,
+        createdAt: new Date(),
+      },
+      chats: [chatRecord],
+      goals: goalRecords,
+    });
+
+    const safeTitle = report.title.replace(/[^a-z0-9]+/gi, "-").replace(/(^-|-$)/g, "").toLowerCase() || "consultation-report";
+
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename=${safeTitle}-${threadId}.pdf`,
       },
     });
   }

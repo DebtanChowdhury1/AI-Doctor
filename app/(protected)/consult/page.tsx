@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   ClipboardList,
   Clock,
+  Download,
   Edit3,
   History,
   Loader2,
@@ -211,6 +212,7 @@ export default function ConsultPage() {
   const [image, setImage] = useState<string | undefined>();
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
+  const [downloadingThreadId, setDownloadingThreadId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const activeThread = useMemo(
@@ -328,6 +330,42 @@ export default function ConsultPage() {
     setMessages([]);
     setInput("");
     setImage(undefined);
+  };
+
+  const downloadThreadReport = async (thread: ChatThread) => {
+    setDownloadingThreadId(thread._id);
+    try {
+      const res = await fetch(`/api/report?threadId=${thread._id}`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const safeTitle = thread.title
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/(^-|-$)/g, "")
+        .toLowerCase() || "consultation";
+      link.download = `${safeTitle}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast({
+        title: "Report prepared",
+        description: "Your AI-powered consultation brief is downloading.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Download failed",
+        description: "We couldn't create that report. Please try again shortly.",
+      });
+    } finally {
+      setDownloadingThreadId(null);
+    }
   };
 
   const handleSelectThread = (thread: ChatThread) => {
@@ -545,7 +583,25 @@ export default function ConsultPage() {
                         {(thread.messages?.[thread.messages.length - 1]?.content ?? "").slice(0, 120) || "Awaiting notes"}
                       </p>
                     </button>
-                    <div className="mt-3 flex items-center justify-end gap-2">
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadThreadReport(thread)}
+                        disabled={downloadingThreadId === thread._id}
+                      >
+                        {downloadingThreadId === thread._id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Preparing
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-2 h-4 w-4" />
+                            Report
+                          </>
+                        )}
+                      </Button>
                       {editingTitleId === thread._id ? (
                         <>
                           <Button variant="ghost" size="sm" onClick={cancelEditTitle}>
