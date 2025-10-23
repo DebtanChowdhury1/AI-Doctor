@@ -1,43 +1,28 @@
-import { Schema, model, models, Types } from "mongoose";
+import { Schema, model, models } from "mongoose";
 
-export interface Message {
-  role: "user" | "assistant";
-  content: string;
-  createdAt: Date;
-  imageBase64?: string;
-}
-
-export interface ChatDocument {
-  _id: Types.ObjectId;
-  userId: string;
-  title: string;
-  messages: Message[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const MessageSchema = new Schema<Message>(
+const MessageSchema = new Schema(
   {
-    role: { type: String, required: true, enum: ["user", "assistant"] },
+    role: { type: String, enum: ["user", "assistant", "system"], required: true },
     content: { type: String, required: true },
-    imageBase64: { type: String },
+    citations: { type: [String], default: [] },
     createdAt: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
-const ChatSchema = new Schema<ChatDocument>(
+const ChatSchema = new Schema(
   {
     userId: { type: String, required: true, index: true },
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-      default: "Untitled consultation",
-    },
+    title: { type: String, required: true },
+    sourceType: { type: String, enum: ["youtube", "topic", "text"], default: "topic" },
+    sourceValue: { type: String },
+    insights: { type: [String], default: [] },
+    followUpPrompt: { type: String },
     messages: { type: [MessageSchema], default: [] },
+    pdfUrl: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const Chat = models.Chat || model<ChatDocument>("Chat", ChatSchema);
+const ChatModel = models.Chat || model("Chat", ChatSchema);
+export default ChatModel;

@@ -2,8 +2,8 @@ import { SignUp } from "@clerk/nextjs";
 
 export default function SignUpPage() {
   return (
-    <div className="flex justify-center">
-      <div className="glass-card mt-10 w-full max-w-md rounded-3xl p-6">
+    <div className="flex min-h-[calc(100vh-120px)] items-center justify-center">
+      <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-background/70 p-6 shadow-xl backdrop-blur-xl">
         <SignUp signInUrl="/sign-in" />
       </div>
     </div>

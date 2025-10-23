@@ -1,33 +1,30 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { ThemeProvider } from "@/components/providers/theme-provider";
-import { Toaster } from "@/components/ui/toaster";
+import { Space_Grotesk } from "next/font/google";
+
 import "./globals.css";
-import { Navbar } from "@/components/layout/navbar";
-import { cn } from "@/lib/utils";
+
+import { AppToaster } from "@/components/ui/sonner-toaster";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Header } from "@/components/layout/header";
+
+const font = Space_Grotesk({ subsets: ["latin"], display: "swap", variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "AI Doctor | Your Smart Health Companion",
-  description: "Consult with the AI Doctor, track your wellness goals, and generate actionable reports in one secure hub.",
+  title: "AI Mentor — Learn Anything, From Anyone, Anytime",
+  description: "AI Mentor transforms any video or topic into an interactive tutor with Gemini 2.0 Flash.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body
-          className={cn(
-            "min-h-screen bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-white font-sans"
-          )}
-        >
+        <body className={`${font.variable} min-h-screen bg-background font-sans text-foreground`}>
           <ThemeProvider>
-            <div className="flex min-h-screen flex-col">
-              <Navbar />
-              <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
-                {children}
-              </main>
-            </div>
-            <Toaster />
+            <Header />
+            <main className="container pb-20 pt-10">{children}</main>
+            <AppToaster />
           </ThemeProvider>
         </body>
       </html>
