@@ -66,7 +66,7 @@ type ReportPayload = {
   sections: Array<{ heading: string; bullets: string[] }>;
 };
 
-async function buildReportBuffer({
+async function legacyBuildReportBuffer({
   report,
   chats,
   goals,
@@ -320,6 +320,411 @@ async function buildReportBuffer({
     spacer(1.1);
   });
 
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
+void legacyBuildReportBuffer;
+
+async function buildReportBuffer({
+  report,
+  chats,
+  goals,
+}: {
+  report: ReportPayload & { personalNotes?: string; createdAt: Date };
+  chats: ChatRecord[];
+  goals: GoalRecord[];
+}) {
+  const pdfDoc = await PDFDocument.create();
+  let page = pdfDoc.addPage([612, 792]);
+  const margin = 44;
+
+  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const ink = rgb(15 / 255, 23 / 255, 42 / 255);
+  const muted = rgb(71 / 255, 85 / 255, 105 / 255);
+  const faint = rgb(248 / 255, 250 / 255, 252 / 255);
+  const border = rgb(226 / 255, 232 / 255, 240 / 255);
+  const brand = rgb(79 / 255, 70 / 255, 229 / 255);
+  const brandSoft = rgb(238 / 255, 242 / 255, 255 / 255);
+  const teal = rgb(13 / 255, 148 / 255, 136 / 255);
+  const tealSoft = rgb(240 / 255, 253 / 255, 250 / 255);
+  const amber = rgb(180 / 255, 83 / 255, 9 / 255);
+  const amberSoft = rgb(255 / 255, 251 / 255, 235 / 255);
+  const white = rgb(1, 1, 1);
+
+  let { width, height } = page.getSize();
+  const contentWidth = width - margin * 2;
+  let cursorY = height - 96;
+  let pageNumber = 1;
+
+  const lineHeight = (size: number) => size * 1.38;
+
+  const sanitizeText = (text: string) =>
+    text
+      .replace(/\*\*/g, "")
+      .replace(/^#{1,6}\s*/gm, "")
+      .replace(/[•]/g, "-")
+      .replace(/[—–]/g, "-")
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/[^\x20-\x7E]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const truncate = (text: string, maxLength: number) => {
+    const clean = sanitizeText(text);
+    return clean.length > maxLength ? `${clean.slice(0, maxLength - 3).trim()}...` : clean;
+  };
+
+  const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number) => {
+    const words = sanitizeText(text).split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let line = "";
+
+    words.forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, size) > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    });
+
+    if (line) {
+      lines.push(line);
+    }
+
+    return lines;
+  };
+
+  const drawChrome = () => {
+    page.drawRectangle({
+      x: 0,
+      y: height - 64,
+      width,
+      height: 64,
+      color: ink,
+    });
+    page.drawRectangle({
+      x: 0,
+      y: height - 68,
+      width,
+      height: 4,
+      color: brand,
+    });
+    page.drawText("AI DOCTOR", {
+      x: margin,
+      y: height - 36,
+      font: boldFont,
+      size: 13,
+      color: white,
+    });
+    page.drawText("Clinical-style wellness report", {
+      x: margin + 86,
+      y: height - 36,
+      font: regularFont,
+      size: 10,
+      color: rgb(203 / 255, 213 / 255, 225 / 255),
+    });
+    page.drawText(`Page ${pageNumber}`, {
+      x: width - margin - 42,
+      y: height - 36,
+      font: regularFont,
+      size: 9,
+      color: rgb(203 / 255, 213 / 255, 225 / 255),
+    });
+  };
+
+  const drawFooter = () => {
+    page.drawLine({
+      start: { x: margin, y: 38 },
+      end: { x: width - margin, y: 38 },
+      thickness: 0.5,
+      color: border,
+    });
+    page.drawText("Educational AI-powered summary. Not a diagnosis. Review with a licensed clinician.", {
+      x: margin,
+      y: 22,
+      font: regularFont,
+      size: 8,
+      color: muted,
+    });
+  };
+
+  const newPage = () => {
+    drawFooter();
+    page = pdfDoc.addPage([612, 792]);
+    pageNumber += 1;
+    ({ width, height } = page.getSize());
+    cursorY = height - 96;
+    drawChrome();
+  };
+
+  const ensureSpace = (size: number) => {
+    if (cursorY - size < 58) {
+      newPage();
+    }
+  };
+
+  const drawBox = ({
+    y,
+    x = margin,
+    boxWidth = contentWidth,
+    boxHeight,
+    color = white,
+    borderColor = border,
+    opacity = 1,
+  }: {
+    y: number;
+    x?: number;
+    boxWidth?: number;
+    boxHeight: number;
+    color?: RGB;
+    borderColor?: RGB;
+    opacity?: number;
+  }) => {
+    page.drawRectangle({
+      x,
+      y: y - boxHeight,
+      width: boxWidth,
+      height: boxHeight,
+      color,
+      opacity,
+    });
+    page.drawRectangle({
+      x,
+      y: y - boxHeight,
+      width: boxWidth,
+      height: boxHeight,
+      borderColor,
+      borderWidth: 0.8,
+    });
+  };
+
+  const drawLines = ({
+    lines,
+    x = margin,
+    font = regularFont,
+    size = 11,
+    color = muted,
+    leading = lineHeight(size),
+  }: {
+    lines: string[];
+    x?: number;
+    font?: PDFFont;
+    size?: number;
+    color?: RGB;
+    leading?: number;
+  }) => {
+    lines.forEach((line) => {
+      page.drawText(line, {
+        x,
+        y: cursorY - size,
+        font,
+        size,
+        color,
+      });
+      cursorY -= leading;
+    });
+  };
+
+  const drawHeading = (label: string) => {
+    ensureSpace(34);
+    page.drawRectangle({
+      x: margin,
+      y: cursorY - 19,
+      width: 4,
+      height: 19,
+      color: brand,
+    });
+    page.drawText(label.toUpperCase(), {
+      x: margin + 12,
+      y: cursorY - 15,
+      font: boldFont,
+      size: 12,
+      color: ink,
+    });
+    cursorY -= 30;
+  };
+
+  const drawMetric = (label: string, value: string, x: number, boxWidth: number) => {
+    drawBox({ x, y: cursorY, boxWidth, boxHeight: 54, color: faint });
+    page.drawText(label.toUpperCase(), {
+      x: x + 14,
+      y: cursorY - 18,
+      font: regularFont,
+      size: 7.5,
+      color: muted,
+    });
+    page.drawText(value, {
+      x: x + 14,
+      y: cursorY - 40,
+      font: boldFont,
+      size: 14,
+      color: ink,
+    });
+  };
+
+  const drawTextCard = ({
+    title,
+    body,
+    tone = "brand",
+  }: {
+    title: string;
+    body: string;
+    tone?: "brand" | "teal" | "amber";
+  }) => {
+    const toneColor = tone === "teal" ? teal : tone === "amber" ? amber : brand;
+    const fill = tone === "teal" ? tealSoft : tone === "amber" ? amberSoft : brandSoft;
+    const titleLines = wrapText(title || "Section", boldFont, 12, contentWidth - 34).slice(0, 2);
+    const bodyLines = wrapText(body || "No details available.", regularFont, 10.5, contentWidth - 34).slice(0, 12);
+    const boxHeight = 28 + titleLines.length * 16 + bodyLines.length * 14;
+
+    ensureSpace(boxHeight + 10);
+    drawBox({ y: cursorY, boxHeight, color: fill, borderColor: border });
+    page.drawRectangle({
+      x: margin,
+      y: cursorY - boxHeight,
+      width: 4,
+      height: boxHeight,
+      color: toneColor,
+    });
+    cursorY -= 16;
+    drawLines({ lines: titleLines, x: margin + 18, font: boldFont, size: 12, color: toneColor, leading: 16 });
+    cursorY -= 2;
+    drawLines({ lines: bodyLines, x: margin + 18, font: regularFont, size: 10.5, color: muted, leading: 14 });
+    cursorY -= 12;
+  };
+
+  drawChrome();
+
+  const titleLines = wrapText(report.title || "AI Doctor Wellness Report", boldFont, 23, contentWidth - 40).slice(0, 3);
+  const coverHeight = 148 + Math.max(0, titleLines.length - 1) * 24;
+  drawBox({ y: cursorY, boxHeight: coverHeight, color: white, borderColor: border });
+  page.drawText("PERSONAL WELLNESS BRIEF", {
+    x: margin + 20,
+    y: cursorY - 28,
+    font: boldFont,
+    size: 9,
+    color: brand,
+  });
+  cursorY -= 58;
+  drawLines({ lines: titleLines, x: margin + 20, font: boldFont, size: 23, color: ink, leading: 28 });
+  cursorY -= 4;
+  page.drawText(`Generated ${new Date(report.createdAt).toLocaleString()}`, {
+    x: margin + 20,
+    y: cursorY - 12,
+    font: regularFont,
+    size: 10,
+    color: muted,
+  });
+  cursorY -= 38;
+
+  const metricWidth = (contentWidth - 40) / 3;
+  drawMetric("Consultations", String(chats.length), margin + 20, metricWidth - 8);
+  drawMetric("Active goals", String(goals.length), margin + 20 + metricWidth, metricWidth - 8);
+  drawMetric("Report type", report.personalNotes ? "Custom" : "Auto", margin + 20 + metricWidth * 2, metricWidth - 8);
+  cursorY -= 76;
+
+  drawHeading("Executive Summary");
+  drawTextCard({ title: "Summary", body: report.summary || "No summary available.", tone: "brand" });
+
+  if (report.focusHighlights?.length) {
+    drawHeading("Priority Highlights");
+    report.focusHighlights.slice(0, 5).forEach((item, index) => {
+      drawTextCard({
+        title: `Highlight ${index + 1}`,
+        body: item,
+        tone: "teal",
+      });
+    });
+  }
+
+  if (report.careNote) {
+    drawHeading("Clinical Reminder");
+    drawTextCard({ title: "Review With A Licensed Clinician", body: report.careNote, tone: "amber" });
+  }
+
+  if (report.sections.length) {
+    drawHeading("Care Guidance");
+    report.sections.forEach((section) => {
+      const bullets = section.bullets.map((bullet) => `- ${bullet}`).join(" ");
+      drawTextCard({ title: section.heading, body: bullets, tone: "brand" });
+    });
+  }
+
+  if (report.personalNotes) {
+    drawHeading("Personal Notes");
+    drawTextCard({ title: "Your Notes", body: report.personalNotes, tone: "teal" });
+  }
+
+  if (chats.length) {
+    drawHeading("Consultation Timeline");
+    chats.slice(-5).forEach((chat, index) => {
+      const latestMessages = (chat.messages ?? [])
+        .slice(-3)
+        .map((message) => `${message.role === "assistant" ? "AI" : "You"}: ${truncate(message.content, 260)}`)
+        .join(" ");
+      drawTextCard({
+        title: `${index + 1}. ${chat.title || "Consultation"} - ${new Date(chat.createdAt).toLocaleDateString()}`,
+        body: latestMessages || "No messages available.",
+        tone: "brand",
+      });
+    });
+  }
+
+  if (goals.length) {
+    drawHeading("Goal Progress");
+    goals.forEach((goal) => {
+      const progressHistory = goal.progressHistory ?? [];
+      const latest = progressHistory[progressHistory.length - 1];
+      const progress = Math.max(0, Math.min(100, latest?.value ?? 0));
+      const note = latest
+        ? `Latest update: ${progress}% on ${new Date(latest.date).toLocaleDateString()}${latest.note ? ` - ${latest.note}` : ""}`
+        : "No progress updates recorded yet.";
+      const noteLines = wrapText(note, regularFont, 10.5, contentWidth - 34).slice(0, 4);
+      const boxHeight = 70 + noteLines.length * 14;
+
+      ensureSpace(boxHeight + 10);
+      drawBox({ y: cursorY, boxHeight, color: tealSoft, borderColor: border });
+      page.drawText(sanitizeText(goal.title), {
+        x: margin + 18,
+        y: cursorY - 20,
+        font: boldFont,
+        size: 12,
+        color: teal,
+      });
+      page.drawText(`${progress}%`, {
+        x: width - margin - 54,
+        y: cursorY - 22,
+        font: boldFont,
+        size: 11,
+        color: teal,
+      });
+      page.drawRectangle({
+        x: margin + 18,
+        y: cursorY - 43,
+        width: contentWidth - 36,
+        height: 8,
+        color: border,
+      });
+      page.drawRectangle({
+        x: margin + 18,
+        y: cursorY - 43,
+        width: ((contentWidth - 36) * progress) / 100,
+        height: 8,
+        color: teal,
+      });
+      cursorY -= 60;
+      drawLines({ lines: noteLines, x: margin + 18, font: regularFont, size: 10.5, color: muted, leading: 14 });
+      cursorY -= 12;
+    });
+  }
+
+  drawFooter();
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
 }

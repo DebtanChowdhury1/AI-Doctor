@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check:db": "node scripts/check-db.mjs",
     "lint": "next lint"
   },
   "dependencies": {

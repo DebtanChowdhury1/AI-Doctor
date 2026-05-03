@@ -19,7 +19,7 @@ import {
   Legend,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 interface DashboardData {
@@ -45,6 +45,43 @@ interface DashboardData {
 
 const COLORS = ["#6C63FF", "#2EC4B6", "#FFB703", "#F97316", "#22D3EE"];
 const FOCUS_COLORS = ["from-brand/20 to-brand/5", "from-success/20 to-success/5", "from-warning/20 to-warning/5"];
+
+function cleanInsightText(value: string) {
+  return value
+    .replace(/^#{1,6}\s*/, "")
+    .replace(/^\d+[\.)]\s*/, "")
+    .replace(/^[-*]\s*/, "")
+    .replace(/\*\*/g, "")
+    .trim();
+}
+
+function parseInsights(value: string) {
+  const lines = value
+    .split(/\n+/)
+    .map(cleanInsightText)
+    .filter(Boolean);
+  const sections: Array<{ title: string; body: string[] }> = [];
+
+  lines.forEach((line) => {
+    const isLikelyHeading = line.length <= 70 && !/[.!?]$/.test(line);
+    if (isLikelyHeading) {
+      sections.push({ title: line, body: [] });
+      return;
+    }
+
+    if (sections.length === 0) {
+      sections.push({ title: "Personalized Insight", body: [] });
+    }
+    sections[sections.length - 1].body.push(line);
+  });
+
+  return sections
+    .map((section) => ({
+      ...section,
+      body: section.body.length ? section.body : ["Review this area during your next check-in."],
+    }))
+    .slice(0, 4);
+}
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -100,6 +137,7 @@ export default function DashboardPage() {
 
   const symptomData = data.symptomCounts.filter((item) => item.count > 0);
   const weeklyEngagement = data.weeklyEngagement;
+  const insightSections = parseInsights(data.insights);
 
   return (
     <div className="space-y-8">
@@ -324,18 +362,26 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Wellness Insights</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {data.insights
-            .split(/\n+/)
-            .filter(Boolean)
-            .map((insight, index) => (
-              <div
-                key={`${insight}-${index}`}
-                className="rounded-3xl border border-brand/10 bg-brand/5 p-4 text-sm leading-relaxed text-slate-700 dark:border-brand/20 dark:bg-slate-900/70 dark:text-slate-200"
-              >
-                {insight}
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          {insightSections.map((section, index) => (
+            <div
+              key={`${section.title}-${index}`}
+              className="rounded-2xl border border-brand/10 bg-brand/5 p-4 text-sm leading-relaxed text-slate-700 shadow-sm dark:border-brand/20 dark:bg-slate-900/70 dark:text-slate-200"
+            >
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                <Sparkles className="h-4 w-4 shrink-0 text-brand" />
+                <span>{section.title}</span>
               </div>
-            ))}
+              <ul className="mt-3 space-y-2">
+                {section.body.map((item) => (
+                  <li key={item} className="flex gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </CardContent>
       </Card>
     </div>

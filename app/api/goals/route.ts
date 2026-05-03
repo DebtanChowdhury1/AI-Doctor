@@ -41,11 +41,29 @@ function parseRoadmapResponse(raw: string): RoadmapResult {
     };
   }
 
-  const steps: GoalRoadmapStep[] = Array.isArray(parsed.steps)
+  const sourceSteps = Array.isArray(parsed.steps)
     ? parsed.steps
+    : Array.isArray(parsed.roadmap_steps)
+      ? parsed.roadmap_steps
+      : [];
+
+  const steps: GoalRoadmapStep[] = sourceSteps.length
+    ? sourceSteps
         .map((step: Record<string, unknown>) => ({
-          dayLabel: typeof step.dayLabel === "string" ? step.dayLabel : "Milestone",
-          focus: typeof step.focus === "string" ? step.focus : "Stay consistent",
+          dayLabel:
+            typeof step.dayLabel === "string"
+              ? step.dayLabel
+              : typeof step.day_label === "string"
+                ? step.day_label
+                : typeof step.step_number === "number"
+                  ? `Step ${step.step_number}`
+                  : "Milestone",
+          focus:
+            typeof step.focus === "string"
+              ? step.focus
+              : typeof step.step_title === "string"
+                ? step.step_title
+                : "Stay consistent",
           actions: Array.isArray(step.actions)
             ? step.actions.filter((action): action is string => typeof action === "string")
             : [],
@@ -54,7 +72,14 @@ function parseRoadmapResponse(raw: string): RoadmapResult {
     : [];
 
   return {
-    summary: typeof parsed.summary === "string" ? parsed.summary : raw.trim(),
+    summary:
+      typeof parsed.summary === "string"
+        ? parsed.summary
+        : parsed.summary && typeof parsed.summary === "object" && typeof parsed.summary.goal === "string"
+          ? parsed.summary.goal
+          : typeof parsed.goal_title === "string"
+            ? parsed.goal_title
+            : raw.trim(),
     steps,
   };
 }
@@ -68,11 +93,25 @@ function parsePlanResponse(raw: string): PlanResult {
     };
   }
 
+  const roadmapSteps = Array.isArray(parsed.roadmap_steps) ? parsed.roadmap_steps : [];
+  const fallbackChecklist = roadmapSteps
+    .flatMap((step: Record<string, unknown>) =>
+      Array.isArray(step.actions) ? step.actions.filter((item): item is string => typeof item === "string") : []
+    )
+    .slice(0, 3);
+
   return {
-    guidance: typeof parsed.guidance === "string" ? parsed.guidance : raw.trim(),
+    guidance:
+      typeof parsed.guidance === "string"
+        ? parsed.guidance
+        : typeof parsed.latest_progress === "string"
+          ? parsed.latest_progress
+          : typeof parsed.goal_title === "string"
+            ? `Tomorrow, keep your focus on ${parsed.goal_title}.`
+            : raw.trim(),
     checklist: Array.isArray(parsed.checklist)
       ? parsed.checklist.filter((item: unknown): item is string => typeof item === "string")
-      : [],
+      : fallbackChecklist,
   };
 }
 

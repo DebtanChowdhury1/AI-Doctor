@@ -223,9 +223,18 @@ export async function GET() {
     .map((goal) => `${goal.title} at ${goal.latestValue}%`)
     .join(", ") || "none"}. Current streak: ${currentStreak} days. Weekly engagement: ${weeklyEngagement
     .map((entry) => `${entry.label} ${entry.consults} consults/${entry.checkins} check-ins`)
-    .join(", ")}. Provide three short insights with motivating actions.`;
+    .join(", ")}. Provide three short wellness insight sections. Use plain text only, no markdown, no asterisks, no code fences. Format each section as a short title line followed by one concise action sentence.`;
 
-  const insights = await callGemini(insightPrompt);
+  let insights =
+    "1. Keep building your health history with regular consultations and goal check-ins.\n" +
+    "2. Review your top symptom patterns before your next medical appointment.\n" +
+    "3. Add measurable wellness goals so the dashboard can track progress over time.";
+
+  try {
+    insights = await callGemini(insightPrompt);
+  } catch (error) {
+    console.warn("Dashboard insights fallback used:", error);
+  }
 
   return NextResponse.json({
     totalConsultations,

@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import mongoose from "mongoose";
 
 interface Cached {
@@ -23,6 +24,10 @@ export async function connectToDatabase() {
     throw new Error("MONGODB_URI is not set in environment variables");
   }
 
+  if (MONGODB_URI.startsWith("mongodb+srv://")) {
+    dns.setServers(["8.8.8.8", "1.1.1.1"]);
+  }
+
   if (cached?.conn) {
     return cached.conn;
   }
@@ -33,6 +38,12 @@ export async function connectToDatabase() {
     });
   }
 
-  cached!.conn = await cached!.promise;
+  try {
+    cached!.conn = await cached!.promise;
+  } catch (error) {
+    cached!.promise = null;
+    throw error;
+  }
+
   return cached!.conn;
 }

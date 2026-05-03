@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 
-import { CalendarDays, Edit3, Loader2, PlusCircle, Trash2, Wand2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Edit3, Loader2, PlusCircle, Target, Trash2, Wand2 } from "lucide-react";
 
 interface GoalRoadmapStep {
   dayLabel: string;
@@ -42,6 +42,109 @@ function formatInputDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
+}
+
+function parseJsonFromText(value?: string) {
+  if (!value) return null;
+  const cleaned = value
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) return null;
+
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normaliseRoadmapStep(step: Record<string, unknown>, index: number): GoalRoadmapStep {
+  return {
+    dayLabel:
+      typeof step.dayLabel === "string"
+        ? step.dayLabel
+        : typeof step.day_label === "string"
+          ? step.day_label
+          : typeof step.step_number === "number"
+            ? `Step ${step.step_number}`
+            : `Step ${index + 1}`,
+    focus:
+      typeof step.focus === "string"
+        ? step.focus
+        : typeof step.step_title === "string"
+          ? step.step_title
+          : "Stay consistent",
+    actions: asStringArray(step.actions),
+  };
+}
+
+function getRoadmapDisplay(goal: Goal) {
+  const parsed = parseJsonFromText(goal.roadmapSummary);
+  const parsedSteps = parsed
+    ? Array.isArray(parsed.steps)
+      ? parsed.steps
+      : Array.isArray(parsed.roadmap_steps)
+        ? parsed.roadmap_steps
+        : []
+    : [];
+  const fallbackRoadmap = parsedSteps
+    .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === "object")
+    .map(normaliseRoadmapStep);
+
+  let summary = goal.roadmapSummary;
+  if (parsed) {
+    if (typeof parsed.summary === "string") {
+      summary = parsed.summary;
+    } else if (parsed.summary && typeof parsed.summary === "object" && "goal" in parsed.summary) {
+      const goalSummary = (parsed.summary as Record<string, unknown>).goal;
+      summary = typeof goalSummary === "string" ? goalSummary : summary;
+    } else if (typeof parsed.goal_title === "string") {
+      summary = parsed.goal_title;
+    }
+  }
+
+  return {
+    summary,
+    roadmap: goal.roadmap?.length ? goal.roadmap : fallbackRoadmap,
+  };
+}
+
+function getGuidanceDisplay(entry?: GoalProgressEntry) {
+  const parsed = parseJsonFromText(entry?.guidance);
+  if (!parsed) {
+    return {
+      guidance: entry?.guidance,
+      checklist: entry?.checklist ?? [],
+    };
+  }
+
+  const roadmapSteps = Array.isArray(parsed.roadmap_steps) ? parsed.roadmap_steps : [];
+  const fallbackChecklist = roadmapSteps
+    .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === "object")
+    .flatMap((step) => asStringArray(step.actions))
+    .slice(0, 4);
+  const parsedChecklist = asStringArray(parsed.checklist);
+
+  return {
+    guidance:
+      typeof parsed.guidance === "string"
+        ? parsed.guidance
+        : typeof parsed.latest_progress === "string"
+          ? parsed.latest_progress
+          : typeof parsed.goal_title === "string"
+            ? `Tomorrow, keep your focus on ${parsed.goal_title}.`
+            : entry?.guidance,
+    checklist: entry?.checklist?.length ? entry.checklist : parsedChecklist.concat(fallbackChecklist).slice(0, 4),
+  };
 }
 
 export default function GoalsPage() {
@@ -239,7 +342,7 @@ export default function GoalsPage() {
           animate={{ y: [0, -4, 0] }}
           transition={{ repeat: Infinity, duration: 3 }}
         >
-          Consistency builds momentum 💪
+          Consistency builds momentum
         </motion.div>
       </div>
 
@@ -297,6 +400,8 @@ export default function GoalsPage() {
               note: "",
             };
             const editDraft = editDrafts[goal._id];
+            const roadmapDisplay = getRoadmapDisplay(goal);
+            const guidanceDisplay = getGuidanceDisplay(latest);
 
             return (
               <motion.div key={goal._id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
@@ -381,31 +486,37 @@ export default function GoalsPage() {
                     ) : (
                       <>
                         {goal.description && <p>{goal.description}</p>}
-                        {goal.roadmapSummary && (
-                          <div className="rounded-3xl bg-brand/10 p-4 text-xs text-brand dark:bg-brand/20">
-                            {goal.roadmapSummary}
+                        {roadmapDisplay.summary && (
+                          <div className="rounded-2xl border border-brand/10 bg-brand/10 p-4 text-sm font-medium text-brand dark:border-brand/20 dark:bg-brand/15">
+                            {roadmapDisplay.summary}
                           </div>
                         )}
                       </>
                     )}
 
-                    {goal.roadmap && goal.roadmap.length > 0 && (
+                    {roadmapDisplay.roadmap.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand/80">
-                          Roadmap milestones
-                        </p>
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand/80">
+                          <Target className="h-4 w-4" />
+                          <span>Roadmap milestones</span>
+                        </div>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          {goal.roadmap.slice(0, 6).map((step, index) => (
+                          {roadmapDisplay.roadmap.slice(0, 6).map((step, index) => (
                             <div
                               key={`${goal._id}-roadmap-${step.dayLabel}-${index}`}
-                              className="rounded-2xl border border-brand/10 bg-white/80 p-3 dark:border-brand/20 dark:bg-slate-900/60"
+                              className="rounded-2xl border border-brand/10 bg-white/80 p-3 shadow-sm dark:border-brand/20 dark:bg-slate-900/60"
                             >
                               <p className="text-xs font-semibold text-brand">{step.dayLabel}</p>
-                              <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{step.focus}</p>
+                              <p className="mt-1 break-words text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                {step.focus}
+                              </p>
                               {step.actions?.length > 0 && (
-                                <ul className="mt-2 space-y-1 text-xs text-slate-500">
+                                <ul className="mt-2 space-y-2 text-xs text-slate-500 dark:text-slate-400">
                                   {step.actions.slice(0, 3).map((action) => (
-                                    <li key={action}>• {action}</li>
+                                    <li key={action} className="flex gap-2">
+                                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                                      <span className="break-words">{action}</span>
+                                    </li>
                                   ))}
                                 </ul>
                               )}
@@ -457,16 +568,22 @@ export default function GoalsPage() {
                     </div>
 
                     <div className="space-y-3 text-xs">
-                      {latest?.guidance ? (
-                        <div className="rounded-3xl border border-brand/10 bg-brand/5 p-4 dark:border-brand/20 dark:bg-slate-900/70">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand/80">
-                            AI powered guidance for tomorrow
+                      {guidanceDisplay.guidance ? (
+                        <div className="rounded-2xl border border-brand/10 bg-brand/5 p-4 dark:border-brand/20 dark:bg-slate-900/70">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand/80">
+                            <Wand2 className="h-4 w-4" />
+                            <span>AI powered guidance for tomorrow</span>
+                          </div>
+                          <p className="mt-3 break-words text-sm leading-6 text-slate-700 dark:text-slate-200">
+                            {guidanceDisplay.guidance}
                           </p>
-                          <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{latest.guidance}</p>
-                          {latest.checklist && latest.checklist.length > 0 && (
-                            <ul className="mt-3 space-y-1 text-xs text-slate-500">
-                              {latest.checklist.map((item) => (
-                                <li key={item}>• {item}</li>
+                          {guidanceDisplay.checklist.length > 0 && (
+                            <ul className="mt-3 space-y-2 text-xs text-slate-500 dark:text-slate-400">
+                              {guidanceDisplay.checklist.map((item) => (
+                                <li key={item} className="flex gap-2">
+                                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                                  <span className="break-words">{item}</span>
+                                </li>
                               ))}
                             </ul>
                           )}
@@ -480,8 +597,8 @@ export default function GoalsPage() {
                       <div className="space-y-2">
                         {goal.progressHistory.slice(-3).map((entry) => (
                           <p key={`${goal._id}-${entry.date}`}>
-                            {format(new Date(entry.date), "PPP")} — {entry.value}%
-                            {entry.note && ` · ${entry.note}`}
+                            {format(new Date(entry.date), "PPP")} - {entry.value}%
+                            {entry.note && ` - ${entry.note}`}
                           </p>
                         ))}
                       </div>
